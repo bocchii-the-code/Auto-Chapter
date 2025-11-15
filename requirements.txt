@@ -1,0 +1,6 @@
+# Core OpenAI SDK
+openai>=1.35.0
+
+# Optional: load environment variables from .env
+python-dotenv>=1.0.1
+
