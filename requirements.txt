@@ -4,3 +4,8 @@ openai>=1.35.0
 # Optional: load environment variables from .env
 python-dotenv>=1.0.1
 
+
+# Web API & frontend
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9

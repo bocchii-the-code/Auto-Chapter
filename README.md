@@ -1,30 +1,39 @@
-# Automated Video Analysis & Chapter Generation
+# 视频自动转写 · 摘要 · 章节生成器
 
-一个从【视频】自动生成【英文转写 + 摘要 + 章节大纲】的小工具，基于：
+一个从【视频】自动生成【转写 + 摘要 + 章节大纲】的小工具，支持：
 
-- FFmpeg：抽取音频、按固定时长分片
+- 命令行模式：直接用 `pipeline.py` 处理本地视频
+- Web 页面：上传视频 + 在线查看时间轴和章节结构
+
+底层依赖：
+
+- FFmpeg：抽取音频、按固定时长切片
 - OpenAI Whisper：语音转写（默认 `whisper-1`）
-- OpenAI GPT-4o：根据转写生成总结和带时间戳的章节信息
+- OpenAI / 兼容 API：使用 GPT‑4o 等模型生成摘要和章节信息
 
-> 典型场景：课程视频、讲座、演讲、访谈等长视频的快速理解与结构化整理。  
+> 典型场景：课程视频、讲座、会议录播、播客、访谈等长视频的快速理解与结构化整理。
 
 ---
 
 ## 功能概览
 
-- **自动抽取音频**：从输入视频中用 FFmpeg 抽出音频（单声道、16kHz）。
-- **自动分片转写**：
-  - 按配置时长（默认 600 秒 / 10 分钟）分割音频。
-  - 针对每个分片调用 Whisper 转写，自动重试和指数退避。
-- **生成结构化转写**：
-  - `transcript.txt`：带时间戳的可读转写。
-  - `segments.json`：包含 `start/end/text` 的结构化片段列表。
-- **生成摘要与章节**（GPT-4o）：
-  - `summary.md`：整段视频的英文概要。
-  - `chapters.json`：每个章节的起止时间、标题、描述、关键要点。
-  - `chapters.md`：适合人读的 Markdown 目录，可直接贴进文档/知识库。
-- **临时文件管理**：
-  - 默认自动删除中间产物（音频、切片），也支持通过参数保留调试。
+- **自动抽取音频**
+  - 从输入视频中提取单声道 16kHz 音频
+- **自动分片 + 转写（Whisper）**
+  - 按配置时长（默认 600 秒 / 10 分钟）分片
+  - 对每一片调用 Whisper 转写，内置重试与指数退避
+- **生成结构化转写**
+  - `transcript.txt`：带起止时间的可读转写文本
+  - `segments.json`：包含 `start / end / text` 的片段列表
+- **生成摘要与章节（GPT‑4o 或兼容模型）**
+  - `summary.md`：整段视频的 Markdown 摘要
+  - `chapters.json`：每个章节的起止时间、标题、描述、关键要点
+  - `chapters.md`：适合人类阅读的 Markdown 章节大纲
+- **Web UI 可视化**
+  - 浏览器上传视频，后端调用现有 `pipeline.py`
+  - 页面内直接填写 API Key 和 Base URL（支持 OpenAI 兼容网关）
+  - 时间轴上图形化展示章节块 + 下方章节卡片列表
+  - 字幕预览（只展示前几千字符，完整字幕保存在服务器）
 
 ---
 
@@ -32,11 +41,16 @@
 
 ```text
 .
-├─ pipeline.py        # 主流程脚本（视频 -> 转写 -> 摘要 & 章节）
-├─ api_config.py      # OpenAI 兼容 API 配置（Key / Base URL / 模型）
+├─ pipeline.py        # 主处理流程：视频 -> 转写 -> 摘要 & 章节
+├─ api_config.py      # OpenAI 兼容 API 配置（Key / Base URL / 模型名）
+├─ web_app.py         # FastAPI 后端：包装 pipeline.py + 提供 HTTP 接口
+├─ run_web_ui.py      # 一键启动 Web UI（启动 uvicorn + 自动打开浏览器）
+├─ run_web_ui.bat     # Windows 下双击即可启动 Web UI 的批处理脚本
+├─ static/
+│  └─ index.html      # 单页前端：上传 + 时间轴 + 章节列表 + 字幕预览
 ├─ requirements.txt   # Python 依赖
-├─ README.md          # 项目说明（本文件）
-├─ LICENSE            # 开源许可证（MIT）
+├─ README.md          # 本说明文件
+├─ LICENSE            # MIT License
 └─ output/            # 默认输出目录（运行后生成）
    ├─ transcript.txt
    ├─ segments.json
@@ -46,105 +60,121 @@
    └─ _tmp/           # 中间文件：音频、分片（默认会被删除）
 ```
 
+通过 Web UI 运行时，每次处理会在 `output/` 下新建一个子目录，例如：
+
+```text
+output/web_1700000000_ab12cd34/...
+```
+
+这样不同任务的结果不会互相覆盖。
+
 ---
 
 ## 环境要求
 
-- **操作系统**：Windows / macOS / Linux
-- **Python**：推荐 Python 3.10+（3.8+ 理论上也可）
-- **FFmpeg / ffprobe**：已安装并在 `PATH` 中可用  
-  - 命令行中能执行 `ffmpeg -version`、`ffprobe -version` 即表示可用。
-- **网络**：能够访问配置的 OpenAI 兼容 API（官方或自建网关）。
+- 操作系统：Windows / macOS / Linux
+- Python：建议 3.10+（3.8+ 理论上也支持）
+- FFmpeg / ffprobe：
+  - 已安装并在 `PATH` 中
+  - 终端中可以运行 `ffmpeg -version`、`ffprobe -version`
+- 网络：能访问你配置的 OpenAI / 兼容 API 网关
 
 ---
 
 ## 安装依赖
 
-在项目根目录打开终端，执行：
+在项目根目录执行：
 
 ```bash
 pip install -r requirements.txt
 ```
 
-如使用虚拟环境（推荐）：
+推荐使用虚拟环境：
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate       # macOS / Linux
-# 或
-.\.venv\Scripts\activate        # Windows
+# macOS / Linux
+source .venv/bin/activate
+# Windows
+.\.venv\Scripts\activate
 
 pip install -r requirements.txt
 ```
 
 ---
 
-## 配置 API（安全使用）
+## API 配置方式
 
-项目支持通过环境变量或 `.env` 文件配置 OpenAI 兼容 API。  
-**默认不会在代码中硬编码任何真实 Key**，你只需要配置环境即可。
+本项目支持两种方式配置 OpenAI 兼容 API：
 
-### 1. 支持的环境变量
+1. **环境变量 / `.env` 文件（全局默认）**
+2. **Web 页面中填写 API Key / Base URL（仅对当前请求生效）**
 
-- `OPENAI_API_KEY`：必填，API 密钥
-- `OPENAI_BASE_URL`：可选，Base URL  
-  - 例如：`https://api.openai.com/v1`（官方）  
-  - 或你的自建代理 / 网关地址
-- `OPENAI_GPT_MODEL`：可选，默认为 `gpt-4o`
-- `OPENAI_WHISPER_MODEL`：可选，默认为 `whisper-1`
+### 1. 环境变量 / `.env`
 
-### 2. 可选：使用 `.env` 文件（开发友好）
+`api_config.py` 会尝试从同目录的 `.env` 中加载配置，再读取系统环境变量。
 
-在 `api_config.py` 同目录下创建 `.env` 文件：
+支持的变量：
 
-```env
-OPENAI_API_KEY=sk-xxxxxx_your_real_key_here
+- `OPENAI_API_KEY`：API 密钥（必填，否则会报错）
+- `OPENAI_BASE_URL`：Base URL，例如：
+  - `https://api.openai.com/v1`（官方）
+  - 或者你自己的兼容网关
+- `OPENAI_GPT_MODEL`：用于摘要 / 章节的模型名（默认 `gpt-4o`）
+- `OPENAI_WHISPER_MODEL`：用于转写的模型名（默认 `whisper-1`）
+
+示例 `.env` 文件：
+
+```ini
+OPENAI_API_KEY=sk-...
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_GPT_MODEL=gpt-4o
 OPENAI_WHISPER_MODEL=whisper-1
 ```
 
-`api_config.py` 会自动尝试读取同目录下的 `.env` 并加载以上环境变量。
+> 说明：如果同时设置了环境变量和 `.env`，以及 Web 页面里的 Key，
+> **优先级从高到低为：Web 页面表单 > 系统环境变量 / `.env` > `api_config.py` 默认值**。
 
-> 注意：  
-> - 项目中 `api_config.py` 里的 `API_KEY = ""` 只是一个默认空值占位，不建议在代码里填入真实 Key。  
-> - 上传到 GitHub 前，确保 `.env` 已加入 `.gitignore`，不要提交任何真实密钥。
+### 2. Web 页面中填写
+
+在 Web UI 左侧上传区域下方，有两个输入框：
+
+- `API key`：如 `sk-...`
+- `API base URL`：如 `https://api.openai.com/v1`
+
+你在页面里填写后，每次点击「Start analysis」：
+
+- 这两个值会随表单一起 POST 到后端 `/api/process`
+- 后端在调用 `pipeline.py` 时，将它们写入子进程的环境变量：
+  - `OPENAI_API_KEY`
+  - `OPENAI_BASE_URL`
+- 浏览器会把你的 Key 和 URL 缓存在 `localStorage` 中（只保存在本机浏览器），刷新页面仍然存在，方便多次使用。
 
 ---
 
-## 使用方法
+## 命令行使用（pipeline.py）
 
-### 基本命令
-
-假设你有一个视频 `C:\path\to\lecture.mp4`，在终端执行：
+最基础的用法：
 
 ```bash
-python pipeline.py --video "C:\\path\\to\\lecture.mp4"
+python pipeline.py --video "C:\path\to\lecture.mp4"
 ```
 
 常用参数：
 
-- `--video`（必填）：输入视频文件路径（支持常见格式，如 MP4 等）。
-- `--outdir`（可选）：输出目录，默认在脚本目录创建 `output/`。
-- `--chunk-seconds`（可选）：音频分片长度（秒），默认 `600`（10 分钟）。
-- `--keep-tmp`（可选）：是否保留临时文件（`output/_tmp/`），用于调试。
+- `--video`（必选）：输入视频路径
+- `--outdir`：输出目录（默认：脚本同级的 `output`）
+- `--chunk-seconds`：分片长度（秒），默认 `600`
+- `--keep-tmp`：保留中间文件（音频 / 分片），调试时很有用
 
 示例：
 
 ```bash
-# 使用默认输出目录和分片时长
-python pipeline.py --video "C:\\videos\\lecture.mp4"
-
-# 指定输出目录
-python pipeline.py --video "C:\\videos\\lecture.mp4" --outdir "C:\\analysis\\lecture1"
-
-# 调试时保留临时音频与分片
-python pipeline.py --video "C:\\videos\\lecture.mp4" --keep-tmp
+python pipeline.py ^
+  --video "C:\videos\lecture.mp4" ^
+  --outdir "output\lecture_01" ^
+  --chunk-seconds 600
 ```
-
----
-
-## 输出说明
 
 运行完成后，控制台会打印类似信息：
 
@@ -157,98 +187,146 @@ python pipeline.py --video "C:\\videos\\lecture.mp4" --keep-tmp
  - output/chapters.md
 ```
 
-各文件意义如下：
+---
 
-- `transcript.txt`  
-  - 全部英文转写，按时间顺序排列。  
-  - 每行格式：`[HH:MM:SS - HH:MM:SS] 文本内容`。
+## Web 界面使用
 
-- `segments.json`  
-  - 结构化语音片段数据，示意结构：
-  ```json
-  {
-    "segments": [
-      { "start": 0.0, "end": 12.3, "text": "..." },
-      { "start": 12.3, "end": 25.8, "text": "..." }
-    ]
-  }
-  ```
+Web UI 在命令行管线之上提供了一个简单的可视化界面。
 
-- `summary.md`  
-  - GPT-4o 生成的英文总结，Markdown 格式：
-  ```markdown
-  # Summary
+### 1. 启动 Web UI
 
-  （数段简洁的英文概述）
-  ```
+在项目根目录执行：
 
-- `chapters.json`  
-  - 结构化章节信息，用于做前端展示、知识库入库等：
-  ```json
-  {
-    "chapters": [
-      {
-        "start": "00:00:00",
-        "end": "00:05:30",
-        "title": "Introduction",
-        "description": "What this lecture covers...",
-        "key_points": [
-          "Context of the topic",
-          "Objectives of the session"
-        ]
-      }
-    ]
-  }
-  ```
+```bash
+python run_web_ui.py
+```
 
-- `chapters.md`  
-  - 人类可读的 Markdown 目录，适合作为大纲：
-  ```markdown
-  # Chapters
+或在 Windows 文件管理器中**双击**：
 
-  - [00:00:00 - 00:05:30] Introduction
-    - 简要描述
-    - 关键要点 1
-    - 关键要点 2
+- `run_web_ui.bat`
 
-  - [00:05:30 - 00:12:10] Topic A ...
-  ```
+该脚本会：
+
+1. 切换到项目目录
+2. 如果存在 `.venv`，自动激活虚拟环境
+3. 运行 `python run_web_ui.py`
+
+`run_web_ui.py` 会启动 `uvicorn`（加载 `web_app:app`），并自动打开浏览器访问：
+
+- <http://127.0.0.1:8000/>
+
+### 2. 在页面中操作
+
+1. 在左侧设置 API：
+   - `API key`：填入你的 Key（不会被写入代码，只在本机浏览器保存）
+   - `API base URL`：填你的网关地址（可为空，则使用环境变量 / 默认值）
+2. 拖拽视频到页面中间的区域，或点击「Choose file」选择一个视频文件
+3. 用滑块设置 `Chunk length`（300–1200 秒，默认 600）
+4. 点击 **Start analysis / RUN PIPELINE**
+
+前端会显示当前状态：
+
+- 等待上传 / 正在上传 + 分析 / 完成 / 错误信息
+
+分析结束后，右侧会展示：
+
+- **Summary**
+  - 由 `summary.md` 生成的整体摘要
+- **Timeline and chapters**
+  - 顶部一条时间轴，每个章节对应一段彩色块（长度按时间占比）
+  - 下方章节列表：
+    - `[开始 - 结束] 标题`
+    - 描述文本
+    - 若有 `key_points`，以小标签形式展示
+- **Transcript preview**
+  - `transcript.txt` 的前几千字符预览
+  - 底部一行简单统计：章节数、估计总时长
+
+---
+
+## 输出文件说明
+
+无论是命令行还是 Web UI，最终都会得到同样的核心输出文件：
+
+- `transcript.txt`
+  - 全部转写文本，按时间顺序排列
+  - 每行格式类似：
+    - `[HH:MM:SS - HH:MM:SS] 文本内容...`
+
+- `segments.json`
+  - 结构化的语音片段列表，示意结构：
+
+    ```json
+    {
+      "segments": [
+        { "start": 0.0, "end": 12.3, "text": "..." },
+        { "start": 12.3, "end": 25.8, "text": "..." }
+      ]
+    }
+    ```
+
+- `summary.md`
+  - 使用 GPT 模型生成的 Markdown 摘要
+  - 第一行通常是 `# Summary`，Web UI 会去掉这个标题，只展示正文
+
+- `chapters.json`
+  - 结构化章节信息，适合二次开发 / 入库，例如：
+
+    ```json
+    {
+      "chapters": [
+        {
+          "start": "00:00:00",
+          "end": "00:05:30",
+          "title": "Introduction",
+          "description": "What this lecture covers...",
+          "key_points": [
+            "Context of the topic",
+            "Objectives of the session"
+          ]
+        }
+      ]
+    }
+    ```
+
+- `chapters.md`
+  - 适合人类直接阅读的 Markdown 章节大纲，例如：
+
+    ```markdown
+    # Chapters
+
+    - [00:00:00 - 00:05:30] Introduction
+      - 简要描述……
+      - 关键要点 1
+      - 关键要点 2
+    ```
+
+中间过程使用的音频和分片文件默认存在 `output/_tmp/` 或对应子目录下，处理完成后会自动删除（除非命令行传入 `--keep-tmp`）。
 
 ---
 
 ## 常见问题（FAQ）
 
 - **Q: 支持中文视频吗？**  
-  A: Whisper 模型本身支持多语种，理论上可以识别中文。但本项目后续的摘要与章节提示词使用的是英文，当前设计主要偏向英文输出；如果你想支持中文摘要/章节，可以调整 `pipeline.py` 中 `system_prompt` / `user_prompt` 内容。
+  A: Whisper 模型本身支持多语言，包括中文。当前提示词偏向英文摘要 / 章节，但你可以在 `pipeline.py` 中调整系统提示和用户提示来生成中文摘要和章节标题。
 
-- **Q: 是否会硬编码 API Key？**  
-  A: 默认不会。所有真实密钥通过环境变量或 `.env` 提供。  
+- **Q: API Key 会不会写死在代码里？**  
+  A: 不会。Key 可以通过环境变量、`.env` 或 Web 页面输入三种方式提供，代码中没有硬编码任何真实 Key。  
+  Web 页面中填写的 Key 只会：
+  - 本地存在浏览器 `localStorage`
+  - 发送到你自己的后端（本机运行的 FastAPI）
 
-
-- **Q: 转写/摘要质量不好怎么办？**  
-  - 确保音频清晰、背景噪音相对较低。  
-  - 可以适当缩短 `--chunk-seconds`，让每段更短。  
-  - 可尝试更强的模型（如自定义 `OPENAI_GPT_MODEL`）。
-
----
-
-## 版权与许可（License）
-
-本项目采用 **MIT License** 开源许可证，详见仓库根目录下的 `LICENSE` 文件。  
-简要说明：
-
-- 你可以自由使用、复制、修改、合并、发布本项目的代码，用于个人或商业场景。
-- 使用时需要保留原始版权声明和许可证文本。
-- 本项目按“现状”提供，不对任何形式的损失或风险承担责任。
-
-如需在论文、博客或产品中引用本项目，欢迎在合适位置标注仓库链接。
+- **Q: 转写 / 摘要质量不理想怎么办？**  
+  - 尽量保证音频清晰、背景噪声较低  
+  - 可以适当缩短 `--chunk-seconds`，让每段更短  
+  - 可以通过环境变量切换到更强的模型（例如自定义 `OPENAI_GPT_MODEL`）
 
 ---
 
-## 后续规划建议（可选）
+## 许可证
 
-- 支持多语言摘要与章节（中英双语）。
-- 输出 SRT / VTT 字幕文件，方便导入剪辑软件或播放器。
-- 简易 Web UI，用于上传视频并在线查看结果。
-- 与知识库系统集成（例如直接写入向量库）。
+本项目使用 **MIT License** 开源协议，详见仓库根目录下的 `LICENSE` 文件。
+
+你可以自由地使用、修改、复制和分发本项目代码（包括商用），
+只需在分发时保留原始版权声明和许可文本。
 
