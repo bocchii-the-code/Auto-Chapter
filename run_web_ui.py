@@ -12,7 +12,8 @@ This script:
 import threading
 import time
 import webbrowser
-
+import os
+import shutil
 import uvicorn
 
 
@@ -37,3 +38,14 @@ if __name__ == "__main__":
         port=8000,
         reload=False,
     )
+
+    # Clear upload folder
+    folder_path = './uploads'
+    if os.path.exists(folder_path):
+        shutil.rmtree(folder_path)
+        print(f"Deleted the folder: {folder_path}")
+    else:
+        print(f"Folder not found: {folder_path}")
+
+    os.makedirs(folder_path)
+    print(f"Re-created the empty folder: {folder_path}")

@@ -4,8 +4,8 @@ API 配置文件
 在此处填写/管理 OpenAI 兼容的 API Key 与 Base URL（“节点”）。
 推荐使用环境变量覆盖：
 - OPENAI_API_KEY：API 密钥
-- OPENAI_BASE_URL：Base URL（例如 https://api.openai.com/v1 或自建兼容网关）
-- OPENAI_GPT_MODEL：可选，默认 gpt-4o
+- OPENAI_BASE_URL：Base URL（例如 https://api.openai.com/v1 或 https://api.zetatechs.com/v1 等自建网关）
+- OPENAI_GPT_MODEL：可选，默认 gpt-5.1-2025-11-13
 - OPENAI_WHISPER_MODEL：可选，默认 whisper-1
 """
 
@@ -21,8 +21,8 @@ except Exception:
 
 # 直接在此写入默认值（会被同名环境变量覆盖）
 API_KEY = ""
-BASE_URL = "https://api.openai.com/v1"
-GPT_MODEL = "gpt-4o"
+BASE_URL = "https://api.zetatechs.com/v1" #"https://api.openai.com/v1"
+GPT_MODEL = "gpt-5.1-2025-11-13"
 WHISPER_MODEL = "whisper-1"
 
 
